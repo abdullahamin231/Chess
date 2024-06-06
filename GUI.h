@@ -54,8 +54,10 @@ inline void GUI::show_picked(RenderWindow &window, int picked, int x, int y) {
   Sprite piece;
   int type = picked & 7;
   int color = picked & 24;
+
   piece.setTexture(textures[(type - 1) + (color == Piece.White ? 0 : 6)]);
   piece.setPosition(x - 100, y - 100);
+  piece.setColor(Color(255, 255, 255, 200));
   window.draw(piece);
 }
 inline void GUI::show_legal_moves(RenderWindow &window,

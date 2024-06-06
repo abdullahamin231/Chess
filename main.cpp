@@ -6,6 +6,7 @@
 int main() {
 
   RenderWindow window(VideoMode(960, 960), "Chess");
+  window.setPosition(Vector2i(400, 0));
   GUI gui;
 
   Board board;
@@ -22,6 +23,11 @@ int main() {
     while (window.pollEvent(e)) {
       if (e.type == Event::Closed) {
         window.close();
+      }
+      if (e.type == Event::KeyPressed) {
+        if (e.key.code == Keyboard::P) {
+          board.print();
+        }
       }
       if (e.type == Event::MouseButtonPressed) {
         x = e.mouseButton.x / gui.block_size;
