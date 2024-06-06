@@ -20,7 +20,7 @@ public:
   int turn = 0; // 0 for white's turn, 1 for black's turn
   int picked[2] = {-1, -1};
 
-  int directionOffsets[8] = {8, -8, 1, -1, 7, -7, 9, -9};
+  int directionOffsets[8] = {8, -8, -1, 1, 7, -7, 9, -9};
   int NumSquaresToEdge[64][8];
 
   int enpassant_square = -1;
@@ -83,31 +83,33 @@ inline bool Board::in_check() {
 }
 
 inline void Board::PrecomputedMoveData() {
-
   for (int file = 0; file < 8; file++) {
     for (int rank = 0; rank < 8; rank++) {
+      int squareIndex = rank * 8 + file;
 
       int numNorth = 7 - rank;
       int numSouth = rank;
       int numWest = file;
       int numEast = 7 - file;
 
-      int squareIndex = rank * 8 + file;
-      NumSquaresToEdge[squareIndex][0] = numNorth;
-      NumSquaresToEdge[squareIndex][1] = numSouth;
-      NumSquaresToEdge[squareIndex][2] = numWest;
-      NumSquaresToEdge[squareIndex][3] = numEast;
-      NumSquaresToEdge[squareIndex][4] = min(numNorth, numWest);
-      NumSquaresToEdge[squareIndex][5] = min(numSouth, numEast);
-      NumSquaresToEdge[squareIndex][6] = min(numNorth, numEast);
-      NumSquaresToEdge[squareIndex][7] = min(numSouth, numWest);
+      NumSquaresToEdge[squareIndex][0] = numNorth; // North
+      NumSquaresToEdge[squareIndex][1] = numSouth; // South
+      NumSquaresToEdge[squareIndex][2] = numWest;  // West
+      NumSquaresToEdge[squareIndex][3] = numEast;  // East
+      NumSquaresToEdge[squareIndex][4] =
+          std::min(numNorth, numWest); // North-West
+      NumSquaresToEdge[squareIndex][5] =
+          std::min(numSouth, numEast); // South-East
+      NumSquaresToEdge[squareIndex][6] =
+          std::min(numNorth, numEast); // North-East
+      NumSquaresToEdge[squareIndex][7] =
+          std::min(numSouth, numWest); // South-West
     }
   }
 }
 
 inline void Board::GenerateSlidingMoves(vector<Move> &Moves, int startSquare,
                                         int piece) {
-
   int startDirIndex = Piece.isBishop(piece) ? 4 : 0;
   int endDirIndex = Piece.isRook(piece) ? 4 : 8;
 
@@ -117,15 +119,19 @@ inline void Board::GenerateSlidingMoves(vector<Move> &Moves, int startSquare,
       int targetSquare =
           startSquare + directionOffsets[directionIndex] * (n + 1);
 
+      // Additional check for horizontal moves to ensure they don't wrap around
+      // rows
       int pieceOnTargetSquare = Squares[targetSquare];
 
-      // own colored piece
+      // If the target square is occupied by a piece of the same color, stop
       if (Piece.isCorrectColor(pieceOnTargetSquare, turn)) {
         break;
       }
+
+      // Add the move to the list of possible moves
       Moves.push_back(Move(startSquare, targetSquare));
 
-      // enemey piece
+      // If the target square is occupied by an opponent's piece, stop
       if (Piece.isCorrectColor(pieceOnTargetSquare, !turn)) {
         break;
       }
@@ -304,7 +310,7 @@ inline vector<Move> Board::GenerateForPiece(int piece, int startSquare) {
 inline bool Board::pickup(int x, int y, int &temp_picked) {
 
   int index = y * 8 + x;
-  picked_piece = Squares[index];
+  this->picked_piece = Squares[index];
   int pickColor = picked_piece & 24;
 
   // Check if it's the correct player's turn
@@ -334,16 +340,19 @@ inline void Board::place(int x, int y) {
 
   // Handle castling
   if (Piece.isKing(picked_piece)) {
+    bool can_left, can_right;
     if (isWhite) {
-      if (index == 58) { // Castling queenside
+      can_castle(Piece.White, can_left, can_right);
+      turn = !turn;
+      if (index == 58 && can_left) { // Castling queenside
         white_king_square = 58;
         Squares[58] = Piece.King | Piece.White;
         Squares[59] = Piece.Rook | Piece.White;
         Squares[60] = Piece.None;
         Squares[56] = Piece.None;
-        white_castle[1] = white_castle[2] = 1;
+        white_castle[0] = white_castle[1] = 1;
         return;
-      } else if (index == 62) { // Castling kingside
+      } else if (index == 62 && can_right) { // Castling kingside
         white_king_square = 62;
         Squares[62] = Piece.King | Piece.White;
         Squares[61] = Piece.Rook | Piece.White;
@@ -353,22 +362,21 @@ inline void Board::place(int x, int y) {
         return;
       }
     } else {
-      if (index == 2) { // Castling queenside
+      can_castle(Piece.Black, can_left, can_right);
+      turn = !turn;
+      if (index == 2 && can_left) { // Castling queenside
         black_king_square = 2;
         Squares[2] = Piece.King | Piece.Black;
         Squares[3] = Piece.Rook | Piece.Black;
         Squares[4] = Piece.None;
         Squares[0] = Piece.None;
-        black_castle[1] = black_castle[2] = 1;
+        black_castle[0] = black_castle[1] = 1;
         return;
-      } else if (index == 6) { // Castling kingside
+      } else if (index == 6 && can_right) { // Castling kingside
         black_king_square = 6;
         Squares[6] = Piece.King | Piece.Black;
         Squares[5] = Piece.Rook | Piece.Black;
         Squares[4] = Piece.None;
-        Squares[7] = Piece.None;
-        black_castle[1] = black_castle[2] = 1;
-        return;
       }
     }
   }

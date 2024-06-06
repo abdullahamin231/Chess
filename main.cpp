@@ -10,7 +10,7 @@ int main() {
 
   Board board;
 
-  string startingFEN = "rnbqkbnr/8/8/8/8/8/PPPPPPPP/RNBQKBNR";
+  string startingFEN = "rnbqkbnr/8/8/8/8/8/8/RNBQKBNR";
   board.loadFromFen(startingFEN);
 
   bool picked = false;

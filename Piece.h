@@ -26,7 +26,7 @@ public:
   }
 
   bool isBishop(int piece) { return ((piece & 7) == Bishop); }
-  bool isRook(int piece) { return (piece & 7) == Rook; }
+  bool isRook(int piece) { return ((piece & 7) == Rook); }
   bool isKing(int piece) { return (piece & 7) == King; }
   bool isKnight(int piece) { return (piece & 7) == Knight; }
   bool isPawn(int piece) { return (piece & 7) == Pawn; }
