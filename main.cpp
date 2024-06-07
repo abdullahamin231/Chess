@@ -11,7 +11,7 @@ int main() {
 
   Board board;
 
-  string startingFEN = "rnbqkbnr/8/8/8/8/8/8/RNBQKBNR";
+  string startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
   board.loadFromFen(startingFEN);
 
   bool picked = false;
@@ -27,9 +27,11 @@ int main() {
       if (e.type == Event::KeyPressed) {
         if (e.key.code == Keyboard::P) {
           board.print();
+        } else if (e.key.code == Keyboard::O) {
+          board.checkStatus();
         }
       }
-      if (e.type == Event::MouseButtonPressed) {
+      if (e.type == Event::MouseButtonPressed && !board.hasWon()) {
         x = e.mouseButton.x / gui.block_size;
         y = e.mouseButton.y / gui.block_size;
         if (!picked) {
@@ -43,9 +45,9 @@ int main() {
     window.clear();
     gui.draw(window, board.getSquares());
 
-    if (picked) {
-      gui.show_picked(window, temp_picked, Mouse::getPosition().x,
-                      Mouse::getPosition().y);
+    if (picked && !board.hasWon()) {
+      gui.show_picked(window, temp_picked, Mouse::getPosition(window).x,
+                      Mouse::getPosition(window).y);
       gui.show_legal_moves(window,
                            board.GenerateForPiece(temp_picked, y * 8 + x));
     }

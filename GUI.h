@@ -56,8 +56,8 @@ inline void GUI::show_picked(RenderWindow &window, int picked, int x, int y) {
   int color = picked & 24;
 
   piece.setTexture(textures[(type - 1) + (color == Piece.White ? 0 : 6)]);
-  piece.setPosition(x - 100, y - 100);
-  piece.setColor(Color(255, 255, 255, 200));
+  piece.setPosition(x - 50, y - 20);
+  piece.setColor(Color(255, 255, 255, 220));
   window.draw(piece);
 }
 inline void GUI::show_legal_moves(RenderWindow &window,
@@ -68,7 +68,7 @@ inline void GUI::show_legal_moves(RenderWindow &window,
     legal.setSize(Vector2f(block_size, block_size));
     int rank = move.targetSquare / 8;
     int file = move.targetSquare % 8;
-    legal.setFillColor(Color(200, 0, 0, 150));
+    legal.setFillColor(Color(200, 0, 0, 180));
     legal.setPosition(file * block_size, rank * block_size);
     window.draw(legal);
   }
