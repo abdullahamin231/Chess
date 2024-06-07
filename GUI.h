@@ -1,8 +1,10 @@
+
 #ifndef GUI_H
 #define GUI_H
 
 #include "Piece.h" // Include the Piece header file here
 #include <SFML/Graphics.hpp>
+#include <SFML/System/Vector2.hpp>
 #include <iostream>
 
 #include "Move.h"
@@ -12,6 +14,8 @@ using namespace sf;
 class GUI {
   RectangleShape graphical_board[8][8];
   Texture textures[12];
+
+  //  Color selectedColor(217, 109, 34);
 
 public:
   int block_size = 120;
@@ -37,7 +41,7 @@ public:
         graphical_board[file][rank].setSize(Vector2f(block_size, block_size));
         graphical_board[file][rank].setFillColor(isLight ? light : dark);
         graphical_board[file][rank].setPosition(rank * block_size,
-                                                rank * block_size);
+                                                file * block_size);
       }
     }
   }
@@ -46,11 +50,10 @@ public:
 
   void show_legal_moves(RenderWindow &window, const vector<Move> &Moves);
 
-  void draw(RenderWindow &window, int *Squares);
+  void draw(RenderWindow &window, int *Squares, int picked_piece);
 };
 
 inline void GUI::show_picked(RenderWindow &window, int picked, int x, int y) {
-
   Sprite piece;
   int type = picked & 7;
   int color = picked & 24;
@@ -60,9 +63,9 @@ inline void GUI::show_picked(RenderWindow &window, int picked, int x, int y) {
   piece.setColor(Color(255, 255, 255, 220));
   window.draw(piece);
 }
+
 inline void GUI::show_legal_moves(RenderWindow &window,
                                   const vector<Move> &Moves) {
-
   for (auto &move : Moves) {
     RectangleShape legal;
     legal.setSize(Vector2f(block_size, block_size));
@@ -74,16 +77,23 @@ inline void GUI::show_legal_moves(RenderWindow &window,
   }
 }
 
-inline void GUI::draw(RenderWindow &window, int *Squares) {
-
+inline void GUI::draw(RenderWindow &window, int *Squares, int picked_piece) {
   for (int file = 0; file < 8; file++) {
     for (int rank = 0; rank < 8; rank++) {
-
       graphical_board[file][rank].setPosition(
           rank * block_size, file * block_size); // Position the square
-
-      window.draw(graphical_board[file][rank]); // Draw the square
+      window.draw(graphical_board[file][rank]);  // Draw the square
     }
+  }
+
+  if (picked_piece != -1) { // Ensure picked_piece is a valid index
+    RectangleShape chosen;
+    chosen.setFillColor(Color(222, 111, 35));
+    chosen.setSize(Vector2f(block_size, block_size));
+    int ran = picked_piece / 8;
+    int fil = picked_piece % 8;
+    chosen.setPosition(fil * block_size, ran * block_size);
+    window.draw(chosen);
   }
 
   for (int file = 0; file < 8; file++) {
