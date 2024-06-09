@@ -13,7 +13,8 @@ int main() {
 
   Board board;
   ChessEngine engine(&board);
-  string startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+  string startingFEN = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8";
+  board.whiteCastled = true, board.blackCastled = true;
   board.loadFromFen(startingFEN);
 
   bool picked = false;
@@ -21,17 +22,16 @@ int main() {
 
   int x = -1, y = -1, temp_picked = Piece.None;
 
-  for (int i = 0; i < 6; ++i) {
+  for (int i = 1; i < 4; ++i) {
     auto start = chrono::high_resolution_clock::now();
     int moveCount = board.MoveGenerationTest(i, true);
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
-    cout << "Depth " << i << ": " << moveCount
-         << " moves, Time: " << duration.count() * 1000 << " milliseconds"
-         << endl;
+    cout << "Depth " << i << ": " << moveCount << " moves"
+         << ", Time: " << duration.count() * 1000 << " milliseconds" << endl;
   }
 
-  /*RenderWindow window(VideoMode(960, 960), "Chess");
+  RenderWindow window(VideoMode(960, 960), "Chess");
   window.setPosition(Vector2i(400, 0));
   while (window.isOpen()) { // Added checkmate condition
     Event e;
@@ -69,6 +69,7 @@ int main() {
             checkmate = true;
             cout << "Checkmate!\n";
           } else if (placed) {
+            /*
             Move engine_move = engine.GenerateMove();
             bool engine_placed = board.playEngineMove(
                 engine_move.startSquare, engine_move.targetSquare, temp_picked);
@@ -77,7 +78,7 @@ int main() {
               engine_placed =
                   board.playEngineMove(engine_move.startSquare,
                                        engine_move.targetSquare, temp_picked);
-            }
+            }*/
           }
         }
       }
@@ -93,7 +94,7 @@ int main() {
                            board.GenerateForPiece(temp_picked, y * 8 + x));
     }
     window.display();
-  }*/
+  }
 
   return 0;
 }

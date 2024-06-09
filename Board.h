@@ -7,24 +7,51 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Sleep.hpp>
 #include <SFML/System/Time.hpp>
+#include <SFML/Window/Keyboard.hpp>
 #include <iostream>
+#include <unordered_map>
 using namespace std;
 using namespace sf;
 
 class Board {
 public:
-  Board() { PrecomputedMoveData(); }
+  int captureCount = 0;
+  Board() {
+    PrecomputedMoveData();
+    char files[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
+    // Assign values 0 to 7 to each file
+    for (int i = 0; i < 8; ++i) {
+      rankfile[i] = files[i];
+    }
+  }
+
+  void printMove(int startSquare, int targetSquare) {
+    Piece.name(Squares[startSquare]);
+    cout << " " << rankfile[startSquare % 8] << startSquare / 8
+         << rankfile[targetSquare % 8] << targetSquare / 8 << " - attacking: ";
+    Piece.name(Squares[targetSquare]);
+    cout << endl;
+  }
 
   void checkStatus() { cout << "Picked Piece: " << picked_piece << endl; }
 
   void PrecomputedMoveData();
 
+  // Check for threefold repetition
   int *makeMove(int startSquare, int targetSquare) {
     int *copy = new int[64]; // save board state
     for (int i = 0; i < 64; ++i) {
       copy[i] = Squares[i];
     }
     int moved_piece = Squares[startSquare];
+
+    if (Squares[targetSquare] != Piece.None &&
+        !Piece.sameColor(Squares[targetSquare], moved_piece)) {
+      captureCount++;
+    }
+
+    if (moved_piece == Piece.None)
+      return copy;
     Squares[startSquare] = Piece.None;
     Squares[targetSquare] = moved_piece;
 
@@ -59,7 +86,7 @@ public:
     if (depth == 0)
       return 1;
 
-    vector<Move> moves = this->GenerateAllMoves(otherColor);
+    vector<Move> moves = this->GenerateAllMovesWithCheck(otherColor);
     int numPositions = 0;
     for (auto &move : moves) {
       int *deleteThis = makeMove(move.startSquare, move.targetSquare);
@@ -77,7 +104,7 @@ public:
   void can_castle(int color, bool &can_left, bool &can_right);
 
   bool in_check(bool otherColor = 0);
-  bool isMoveLegal(int startSquare, int targetSquare);
+  bool isMoveLegal(int startSquare, int targetSquare, bool enpassant = false);
 
   void GenerateSlidingMovesN(vector<Move> &Moves, int startSquare, int piece);
   void GenerateSlidingMovesC(vector<Move> &Moves, int startSquare, int piece);
@@ -137,7 +164,9 @@ public:
   int white_castle[5] = {0, 0, 0, 58, 62};
   int black_castle[5] = {0, 0, 0, 2, 6};
 
-  int white_king_square = 60, black_king_square = 4;
+  bool whiteCastled = false, blackCastled = false;
+
+  int black_king_square = 4, white_king_square = 60;
 
   bool won = false;
   int moveCount = 0;
@@ -155,6 +184,9 @@ public:
   }
 
   vector<int> capturedPice;
+  vector<string> boardHistory;
+
+  unordered_map<int, char> rankfile;
 };
 
 inline void Board::PrecomputedMoveData() {
@@ -167,18 +199,14 @@ inline void Board::PrecomputedMoveData() {
       int numWest = file;
       int numEast = 7 - file;
 
-      NumSquaresToEdge[squareIndex][0] = numNorth; // North
-      NumSquaresToEdge[squareIndex][1] = numSouth; // South
-      NumSquaresToEdge[squareIndex][2] = numWest;  // West
-      NumSquaresToEdge[squareIndex][3] = numEast;  // East
-      NumSquaresToEdge[squareIndex][4] =
-          std::min(numNorth, numWest); // North-West
-      NumSquaresToEdge[squareIndex][5] =
-          std::min(numSouth, numEast); // South-East
-      NumSquaresToEdge[squareIndex][6] =
-          std::min(numNorth, numEast); // North-East
-      NumSquaresToEdge[squareIndex][7] =
-          std::min(numSouth, numWest); // South-West
+      NumSquaresToEdge[squareIndex][0] = numNorth;               // North
+      NumSquaresToEdge[squareIndex][1] = numSouth;               // South
+      NumSquaresToEdge[squareIndex][2] = numWest;                // West
+      NumSquaresToEdge[squareIndex][3] = numEast;                // East
+      NumSquaresToEdge[squareIndex][4] = min(numNorth, numWest); // North-West
+      NumSquaresToEdge[squareIndex][5] = min(numSouth, numEast); // South-East
+      NumSquaresToEdge[squareIndex][6] = min(numNorth, numEast); // North-East
+      NumSquaresToEdge[squareIndex][7] = min(numSouth, numWest); // South-West
     }
   }
 }
@@ -233,19 +261,20 @@ inline void Board::GenerateSlidingMovesN(vector<Move> &Moves, int startSquare,
       // around rows
       int pieceOnTargetSquare = Squares[targetSquare];
 
+      // if (pieceOnTargetSquare == Piece.None)
+      // continue;
       // If the target square is occupied by a piece of the same color, stop
-      if (Piece.isCorrectColor(pieceOnTargetSquare, turn)) {
+      if (Piece.sameColor(pieceOnTargetSquare,
+                          turn == 0 ? Piece.White : Piece.Black)) {
         break;
       }
 
       // Add the move to the list of possible moves
       Moves.push_back(Move(startSquare, targetSquare));
 
-      // bool legal_move = isMoveLegal(startSquare, targetSquare);
-      //  if(!legal_move) Moves.pop_back();
-
       // If the target square is occupied by an opponent's piece, stop
-      if (Piece.isCorrectColor(pieceOnTargetSquare, !turn)) {
+      if (Piece.sameColor(pieceOnTargetSquare,
+                          turn == 0 ? Piece.Black : Piece.White)) {
         break;
       }
     }
@@ -298,18 +327,44 @@ inline void Board::GeneratePawnMovesC(vector<Move> &Moves, int startSquare,
     }
   }
 
+  // En Passant Move
   if ((startSquare / 8) == enPassantRow) {
     if (abs((startSquare % 8) - (enpassant_square % 8)) == 1) {
       if (Squares[enpassant_square] == Piece.None ||
           Piece.isCorrectColor(Squares[enpassant_square], !turn)) {
+        // Save current board state
+        updateCopy();
+
+        // Execute the en passant move
+        int capturedPawnSquare =
+            isWhite ? enpassant_square + 8 : enpassant_square - 8;
         Moves.push_back(Move(startSquare, enpassant_square));
-        bool legal_move = isMoveLegal(startSquare, targetSquare);
+        bool legal_move = isMoveLegal(startSquare, enpassant_square, true);
         if (!legal_move && !Moves.empty())
           Moves.pop_back();
+        else {
+          // Perform the move on the board
+          int moved_piece = Squares[startSquare];
+          Squares[startSquare] = Piece.None;
+          Squares[enpassant_square] = moved_piece;
+          Squares[capturedPawnSquare] = Piece.None;
+
+          // Check if king is in check after the move
+          bool still_in_check = in_check();
+          vector<Move> legalMoves = GenerateAllMoves();
+          if (still_in_check && legalMoves.empty()) {
+            Moves.pop_back();
+            copyFromCopy(); // Revert the board state
+          }
+        }
+
+        // Restore board state if needed
+        copyFromCopy();
       }
     }
   }
 }
+
 inline void Board::GeneratePawnMovesN(vector<Move> &Moves, int startSquare,
                                       int piece) {
   bool isWhite = isWhitePiece(piece);
@@ -338,8 +393,9 @@ inline void Board::GeneratePawnMovesN(vector<Move> &Moves, int startSquare,
     if (targetSquare >= 0 && targetSquare < 64 &&
         (startSquare % 8 != 0 || offset != direction - 1) &&
         (startSquare % 8 != 7 || offset != direction + 1)) {
-      if (Piece.isCorrectColor(Squares[targetSquare], !turn))
+      if (Piece.isCorrectColor(Squares[targetSquare], !turn)) {
         Moves.push_back(Move(startSquare, targetSquare));
+      }
     }
   }
 
@@ -458,10 +514,10 @@ inline void Board::can_castle(int color, bool &can_left, bool &can_right) {
     }
 
     can_left = !left_rook_moved && !king_moved && left_b1_empty && !inCheck &&
-               left_c1_empty && left_d1_empty;
+               left_c1_empty && left_d1_empty && !whiteCastled;
 
     can_right = !king_moved && !right_rook_moved && right_f1_empty &&
-                right_g1_empty && !inCheck;
+                right_g1_empty && !inCheck && !whiteCastled;
 
   } else {
     bool left_rook_moved = black_castle[0];
@@ -487,10 +543,10 @@ inline void Board::can_castle(int color, bool &can_left, bool &can_right) {
         right_g8_empty = false;
     }
     can_left = !left_rook_moved && !king_moved && left_b8_empty &&
-               left_c8_empty && left_d8_empty && !inCheck;
+               left_c8_empty && left_d8_empty && !inCheck && !blackCastled;
 
     can_right = !king_moved && !right_rook_moved && right_f8_empty &&
-                right_g8_empty && !inCheck;
+                right_g8_empty && !inCheck && !blackCastled;
   }
 }
 
@@ -580,6 +636,9 @@ inline vector<Move> Board::GenerateAllMoves(bool ofEnemy) {
   for (int startSquare = 0; startSquare < 64; startSquare++) {
     int piece = Squares[startSquare];
 
+    if (piece == Piece.None) {
+      continue;
+    }
     if (Piece.isCorrectColor(piece, turn)) {
       if (Piece.isSliding(piece)) {
         GenerateSlidingMovesN(Moves, startSquare, piece);
@@ -614,9 +673,12 @@ inline vector<Move> Board::GenerateForPiece(int piece, int startSquare) {
   return Moves;
 }
 
-inline bool Board::isMoveLegal(int startSquare, int targetSquare) {
+inline bool Board::isMoveLegal(int startSquare, int targetSquare,
+                               bool enpassant) {
   updateCopy(); // save board state
   int moved_piece = Squares[startSquare];
+  if (moved_piece == Piece.None)
+    return false;
   Squares[startSquare] = Piece.None;
   Squares[targetSquare] = moved_piece;
 
@@ -632,6 +694,11 @@ inline bool Board::isMoveLegal(int startSquare, int targetSquare) {
   }
 
   bool still_in_check = in_check();
+
+  vector<Move> legalMoves = GenerateAllMoves();
+  if (still_in_check && legalMoves.empty())
+    return false;
+
   copyFromCopy(); // reload board state
 
   if (king_moved != -1) {
@@ -715,7 +782,7 @@ inline bool Board::place(int x, int y, int engine_targetSquare) {
     if (isWhite) {
       can_castle(Piece.White, can_left, can_right);
       if (index == 58 && can_left) { // Castling queenside
-        cout << "Castling queenside for white king" << endl;
+        cout << "Castling queenside for White king" << endl;
         white_king_square = 58;
         Squares[58] = Piece.King | Piece.White;
         Squares[59] = Piece.Rook | Piece.White;
@@ -725,7 +792,8 @@ inline bool Board::place(int x, int y, int engine_targetSquare) {
         turn = !turn;
         this->moveCount++;
         updateCopy();
-        return false;
+        whiteCastled = true;
+        return true;
       } else if (index == 62 && can_right) { // Castling kingside
         cout << "Castling kingside for white king" << endl;
         white_king_square = 62;
@@ -737,12 +805,13 @@ inline bool Board::place(int x, int y, int engine_targetSquare) {
         this->moveCount++;
         turn = !turn;
         updateCopy();
-        return false;
+        whiteCastled = true;
+        return true;
       }
     } else {
       can_castle(Piece.Black, can_left, can_right);
       if (index == 2 && can_left) { // Castling queenside
-        cout << "Castling queenside for black king" << endl;
+        cout << "Castling queenside for Black king" << endl;
         black_king_square = 2;
         Squares[2] = Piece.King | Piece.Black;
         Squares[3] = Piece.Rook | Piece.Black;
@@ -752,9 +821,10 @@ inline bool Board::place(int x, int y, int engine_targetSquare) {
         turn = !turn;
         this->moveCount++;
         updateCopy();
-        return false;
+        blackCastled = true;
+        return true;
       } else if (index == 6 && can_right) { // Castling kingside
-        cout << "Castling kingside for black king" << endl;
+        cout << "Castling kingside for Black king" << endl;
         black_king_square = 6;
         Squares[6] = Piece.King | Piece.Black;
         Squares[5] = Piece.Rook | Piece.Black;
@@ -762,8 +832,10 @@ inline bool Board::place(int x, int y, int engine_targetSquare) {
         Squares[7] = Piece.None;
         turn = !turn;
         this->moveCount++;
+        black_castle[0] = black_castle[1] = 1;
         updateCopy();
-        return false;
+        blackCastled = true;
+        return true;
       }
     }
   }
@@ -795,6 +867,9 @@ inline bool Board::place(int x, int y, int engine_targetSquare) {
   this->moveCount++;
   if (index != (picked[1] * 8 + picked[0]))
     Squares[picked[1] * 8 + picked[0]] = Piece.None;
+
+  int startSquare = picked[1] * 8 + picked[0];
+  int targetSquare = y * 8 + x;
 
   if (Piece.isKing(picked_piece)) {
     if (isWhite) {
@@ -851,7 +926,7 @@ inline bool Board::calculateCheckmate() {
     return false;
   }
   if (check && legalMoves.empty()) {
-    cout << "Stalemate.\n";
+    return true;
   }
   // If no legal moves are available, it's checkmate
   cout << "checkmate." << endl;
@@ -993,6 +1068,20 @@ inline bool Board::placeEngine(int x, int y, int targetSquare) {
   }
 
   // Place the picked piece onto the correct index in Squares
+  int capturedPiece = Squares[index];
+  if (Piece.isRook(capturedPiece)) {
+    if (isWhitePiece(capturedPiece)) {
+      if (index == 58)
+        white_castle[0] = true;
+      if (index == 63)
+        white_castle[1] = true;
+    } else {
+      if (index == 0)
+        black_castle[0] = true;
+      if (index == 7)
+        black_castle[1] = true;
+    }
+  }
   Squares[index] = picked_piece;
   cout << "Placed picked piece\n";
   // Promote pawn if it reaches the opposite end
