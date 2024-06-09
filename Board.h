@@ -5,6 +5,9 @@
 #include "Move.h"
 #include "Piece.h"
 #include <SFML/Graphics.hpp>
+#include <SFML/Window/Keyboard.hpp>
+#include <algorithm>
+#include <exception>
 #include <iostream>
 using namespace std;
 using namespace sf;
@@ -16,18 +19,22 @@ public:
   bool placePlayer(int targetSquare, int &main_pickedPiece);
   // Confirms if move is legal
   bool validPlace(int targetSquare);
-  // validPlace() calls GenerateAllLegalMoves()
-  // which will call GenerateMove function for all individual pieces
+  bool isMoveLegal(int startSquare, int targetSquare);
+  bool inCheck();
+  int makeMove(int startSquare, int targetSquare);
+  void undoMove(int movedPiece);
 
-  vector<Move> GenerateAllLegalMoves();
+  vector<Move> GenerateAllLegalMoves(bool ofEnemy, bool checkForCheck);
   vector<Move> GenerateAllLegalMovesForPiece(int piece);
 
   void GenerateSlidingMoves(vector<Move> &moves, int startSquare, int piece,
-                            int friendly_color);
+                            int friendly_color, bool alsoCheck = 0);
   void GenerateKnightMoves(vector<Move> &Moves, int startSquare, int piece,
-                           int friendly_color);
+                           int friendly_color, bool alsoCheck = 0);
   void GeneratePawnMoves(vector<Move> &Moves, int startSquare, int piece,
-                         int friendly_color);
+                         int friendly_color, bool alsoCheck = 0);
+  void GenerateKingMoves(vector<Move> &Moves, int startSquare, int piece,
+                         int correct_color, bool alsoCheck = 0);
 
   Board();
   void PrecomputedMoveData();
@@ -51,6 +58,11 @@ public:
   int pickedPiece = Piece.None;
   int pickedPieceSquare = Piece.None;
   int pickedPieceCords[2];
+
+  int whiteKingPos = 60, blackKingPos = 4, fakeKingPos = -1;
+  bool posChanged = false;
+
+  int enpassantSquare = -1;
 
   int Squares[64] = {0};
   int copySquares[64] = {0};
@@ -81,20 +93,68 @@ inline bool Board::pickPlayer(int startSquare, int &main_pickedPiece) {
 
 inline bool Board::placePlayer(int targetSquare, int &main_pickedPiece) {
   if (!validPlace(targetSquare)) {
+    pickedPiece = 0;
+    pickedPieceSquare = -1;
+    pickedPieceCords[0] = -1, pickedPieceCords[1] = -1;
     return false;
   }
 
+  bool isWhite = isWhitePiece(pickedPiece);
+
+  // Remove picked piece from board
   Squares[pickedPieceSquare] = Piece.None;
+
   int capturedPiece = Squares[targetSquare];
   if (capturedPiece != Piece.None) {
     capturedPieces.push_back(capturedPiece);
   }
+
+  // Place picked piece on board
   Squares[targetSquare] = this->pickedPiece;
 
+  if (Piece.isPawn(pickedPiece)) {
+    if (targetSquare == enpassantSquare) {
+      int enpassantCapturedSquare =
+          isWhite ? enpassantSquare + 8 : enpassantSquare - 8;
+      capturedPiece = Squares[enpassantCapturedSquare];
+      if (capturedPiece != Piece.None) {
+        capturedPieces.push_back(capturedPiece);
+      }
+      Squares[enpassantCapturedSquare] = Piece.None;
+    }
+  }
+
+  // Store capturedPieces
+  if (Squares[targetSquare] != Piece.None) {
+    capturedPieces.push_back(Squares[targetSquare]);
+  }
+
+  // Setting kingPos to be used later in inCheck
+  if (Piece.isKing(this->pickedPiece)) {
+    if (isWhite)
+      whiteKingPos = targetSquare;
+    else
+      blackKingPos = targetSquare;
+  }
+
+  // if pawn moves two squares, set then enpassantSquare
+  if (Piece.isPawn(this->pickedPiece)) {
+    if (abs(targetSquare - pickedPieceSquare) == 16) {
+      enpassantSquare = isWhite ? targetSquare + 8 : targetSquare - 8;
+    } else {
+      enpassantSquare = -1;
+    }
+  } else {
+    enpassantSquare = -1;
+  }
+
+  // so nothing is shown floating
   main_pickedPiece = this->pickedPiece = Piece.None;
   this->pickedPieceSquare = Piece.None;
+
   updateCopy();
   changeTurn();
+
   return true;
 }
 
@@ -102,40 +162,110 @@ inline bool Board::validPlace(int targetSquare) {
   // didn't place anywhere
   if (targetSquare == this->pickedPieceSquare)
     return false;
-  // vector<Move> possible_moves = GenerateAllLegalMoves();
-  // for(auto& move:moves){
-  // if(move.targetSquare == targetSquare){
-  // return true;
-  // }
-  // }
 
+  // calculate all legal moves, if where player is placing
+  // is found in legal moves then it is ok.
+  vector<Move> possible_moves = GenerateAllLegalMoves(false, true);
+  for (auto &move : possible_moves) {
+    if (move.targetSquare == targetSquare) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+inline bool Board::isMoveLegal(int startSquare, int targetSquare) {
+  int movedPiece = makeMove(startSquare, targetSquare);
+  if (inCheck()) {
+    undoMove(movedPiece);
+    return false;
+  }
+  undoMove(movedPiece);
   return true;
 }
 
-inline vector<Move> Board::GenerateAllLegalMoves() {
+inline bool Board::inCheck() {
+  vector<Move> enemyMoves = GenerateAllLegalMoves(true, false);
+  int ownKingColor = isWhiteTurn() ? whiteKingPos : blackKingPos;
+  for (auto &em : enemyMoves) {
+    if (em.targetSquare == ownKingColor)
+      return true;
+  }
+  return false;
+}
 
+inline int Board::makeMove(int startSquare, int targetSquare) {
+  updateCopy();
+  int movedPiece = Squares[startSquare];
+  Squares[startSquare] = Piece.None;
+
+  if (Piece.isKing(movedPiece)) {
+    posChanged = true;
+    if (isWhitePiece(movedPiece)) {
+      fakeKingPos = whiteKingPos;
+      whiteKingPos = targetSquare;
+    } else {
+      fakeKingPos = blackKingPos;
+      blackKingPos = targetSquare;
+    }
+  }
+  Squares[targetSquare] = movedPiece;
+
+  if (targetSquare == enpassantSquare) {
+    Squares[isWhitePiece(movedPiece) ? enpassantSquare + 8
+                                     : enpassantSquare - 8] = Piece.None;
+  }
+
+  return movedPiece;
+}
+inline void Board::undoMove(int movedPiece) {
+  copyFromCopy();
+  if (posChanged) {
+    if (isWhitePiece(movedPiece)) {
+      whiteKingPos = fakeKingPos;
+    } else {
+      blackKingPos = fakeKingPos;
+    }
+  }
+  posChanged = false;
+}
+
+inline vector<Move> Board::GenerateAllLegalMoves(bool ofEnemy,
+                                                 bool checkForCheck) {
   vector<Move> possible_moves;
+
+  if (ofEnemy)
+    changeTurn();
+
   int correct_color = (turn == 0) ? Piece.White : Piece.Black;
+
   for (int startSquare{0}; startSquare < 64; ++startSquare) {
     int piece = Squares[startSquare];
 
-    // Only calculate moves for a piece if it is correct color, (i.e white
-    // pieces for white's turn)
+    // Only calculate moves for a piece if it is correct color
     if (Piece.sameColor(piece, correct_color)) {
       if (Piece.isSliding(piece)) {
-        //        GenerateSlidingMoves(possible_moves, startSquare,
-        //        correct_color);
+        GenerateSlidingMoves(possible_moves, startSquare, piece, correct_color,
+                             checkForCheck);
       } else if (Piece.isKing(piece)) {
-        // GenerateKingMoves(possible_moves, startSquare, piece);
+        GenerateKingMoves(possible_moves, startSquare, piece, correct_color,
+                          checkForCheck);
       } else if (Piece.isKnight(piece)) {
-        // GenerateKnightMoves(possible_moves, startSquare, piece);
+        GenerateKnightMoves(possible_moves, startSquare, piece, correct_color,
+                            checkForCheck);
       } else if (Piece.isPawn(piece)) {
-        // GeneratePawnMoves(possible_moves, startSquare, piece);
+        GeneratePawnMoves(possible_moves, startSquare, piece, correct_color,
+                          checkForCheck);
       }
     }
   }
+  if (ofEnemy) {
+    changeTurn();
+  }
   return possible_moves;
 };
+
 inline vector<Move> Board::GenerateAllLegalMovesForPiece(int piece) {
   vector<Move> possible_moves;
   int correct_color = (turn == 0) ? Piece.White : Piece.Black;
@@ -144,20 +274,25 @@ inline vector<Move> Board::GenerateAllLegalMovesForPiece(int piece) {
   // Only calculate moves for a piece if it is correct color
   if (Piece.sameColor(piece, correct_color)) {
     if (Piece.isSliding(piece)) {
-      GenerateSlidingMoves(possible_moves, startSquare, piece, correct_color);
+      GenerateSlidingMoves(possible_moves, startSquare, piece, correct_color,
+                           true);
     } else if (Piece.isKing(piece)) {
-      // GenerateKingMoves(possible_moves, startSquare, piece);
+      GenerateKingMoves(possible_moves, startSquare, piece, correct_color,
+                        true);
     } else if (Piece.isKnight(piece)) {
-      GenerateKnightMoves(possible_moves, startSquare, piece, correct_color);
+      GenerateKnightMoves(possible_moves, startSquare, piece, correct_color,
+                          true);
     } else if (Piece.isPawn(piece)) {
-      GeneratePawnMoves(possible_moves, startSquare, piece, correct_color);
+      GeneratePawnMoves(possible_moves, startSquare, piece, correct_color,
+                        true);
     }
   }
   return possible_moves;
 };
 
 inline void Board::GenerateSlidingMoves(vector<Move> &Moves, int startSquare,
-                                        int piece, int friendly_color) {
+                                        int piece, int friendly_color,
+                                        bool alsoCheck) {
 
   int enemy_color = friendly_color == 8 ? 16 : 8;
   int startDirIndex = Piece.isBishop(piece) ? 4 : 0;
@@ -175,7 +310,15 @@ inline void Board::GenerateSlidingMoves(vector<Move> &Moves, int startSquare,
         break;
       }
 
-      Moves.push_back(Move(startSquare, targetSquare));
+      if (alsoCheck) {
+        if (isMoveLegal(startSquare, targetSquare)) {
+          Moves.push_back(Move(startSquare, targetSquare));
+        }
+      } else {
+        Moves.push_back(Move(startSquare, targetSquare));
+      }
+      // if(!isMoveLegal(startSquare, targetSquare))
+      // Moves.pop_back();
 
       if (Piece.sameColor(pieceOnTargetSquare, enemy_color)) {
         break;
@@ -185,7 +328,8 @@ inline void Board::GenerateSlidingMoves(vector<Move> &Moves, int startSquare,
 };
 
 inline void Board::GenerateKnightMoves(vector<Move> &Moves, int startSquare,
-                                       int piece, int friendly_color) {
+                                       int piece, int friendly_color,
+                                       bool alsoCheck) {
 
   int dx[] = {2, 2, -2, -2, 1, 1, -1, -1};
   int dy[] = {1, -1, 1, -1, 2, -2, 2, -2};
@@ -200,7 +344,13 @@ inline void Board::GenerateKnightMoves(vector<Move> &Moves, int startSquare,
       if (Piece.sameColor(Squares[targetSquare], friendly_color)) {
         continue;
       }
-      Moves.push_back(Move(startSquare, newRow * 8 + newCol));
+      if (alsoCheck) {
+        if (isMoveLegal(startSquare, targetSquare)) {
+          Moves.push_back(Move(startSquare, newRow * 8 + newCol));
+        }
+      } else
+        Moves.push_back(Move(startSquare, newRow * 8 + newCol));
+
       if (Piece.sameColor(Squares[targetSquare], enemy_color)) {
         continue;
       }
@@ -209,21 +359,35 @@ inline void Board::GenerateKnightMoves(vector<Move> &Moves, int startSquare,
 }
 
 inline void Board::GeneratePawnMoves(vector<Move> &Moves, int startSquare,
-                                     int piece, int friendly_color) {
+                                     int piece, int friendly_color,
+                                     bool alsoCheck) {
   int enemy_color = friendly_color == 8 ? 16 : 8;
   bool isWhite = friendly_color == 8;
   int direction = isWhite ? -8 : 8;
   int firstRow = isWhite ? 6 : 1;
+  int enpassantRow = isWhite ? 3 : 4;
 
   int currentRow = startSquare / 8;
   int targetSquare = startSquare + direction;
   // One space forward + If first move then 2 space forward
   if (Squares[targetSquare] == Piece.None) {
-    Moves.push_back(Move(startSquare, targetSquare));
+    if (alsoCheck) {
+      if (isMoveLegal(startSquare, targetSquare))
+        Moves.push_back(Move(startSquare, targetSquare));
+    } else {
+      Moves.push_back(Move(startSquare, targetSquare));
+    }
     if (currentRow == firstRow) {
       targetSquare += direction;
       if (Squares[targetSquare] == Piece.None) {
-        Moves.push_back(Move(startSquare, targetSquare));
+        if (alsoCheck) {
+          if (isMoveLegal(startSquare, targetSquare)) {
+            Moves.push_back(Move(startSquare, targetSquare));
+          }
+
+        } else {
+          Moves.push_back(Move(startSquare, targetSquare));
+        }
       }
     }
   }
@@ -234,9 +398,62 @@ inline void Board::GeneratePawnMoves(vector<Move> &Moves, int startSquare,
   for (int i : directions) {
     targetSquare += i;
     if (Piece.sameColor(Squares[targetSquare], enemy_color)) {
-      Moves.push_back(Move(startSquare, targetSquare));
+      if (alsoCheck) {
+        if (isMoveLegal(startSquare, targetSquare))
+          Moves.push_back(Move(startSquare, targetSquare));
+      } else {
+        Moves.push_back(Move(startSquare, targetSquare));
+      }
     }
     targetSquare -= i;
+  }
+
+  if (currentRow == enpassantRow) {
+    if (abs(startSquare % 8 - enpassantSquare % 8) == 1) {
+      if (Squares[enpassantSquare] == Piece.None ||
+          Piece.sameColor(Squares[enpassantSquare], enemy_color)) {
+        if (alsoCheck) {
+          if (isMoveLegal(startSquare, enpassantSquare)) {
+            Moves.push_back(Move(startSquare, enpassantSquare));
+          }
+        } else {
+          Moves.push_back(Move(startSquare, enpassantSquare));
+        }
+      }
+    }
+  }
+};
+
+inline void Board::GenerateKingMoves(vector<Move> &Moves, int startSquare,
+                                     int piece, int friendly_color,
+                                     bool alsoCheck) {
+
+  int enemy_color = friendly_color == 8 ? 16 : 8;
+  int ownCol = startSquare % 8, ownRow = startSquare / 8;
+  for (int directionIndex = 0; directionIndex < 8; ++directionIndex) {
+    int targetSquare = startSquare + directionOffsets[directionIndex];
+
+    // Check if targetSquare is within board limits
+    if (targetSquare < 0 || targetSquare >= 64) {
+      continue; // Skip invalid squares
+    }
+
+    int targetCol = targetSquare % 8, targetRow = targetSquare / 8;
+
+    if (abs(targetCol - ownCol) > 1)
+      continue;
+
+    int pieceOnTargetSquare = Squares[targetSquare];
+
+    if (pieceOnTargetSquare == Piece.None ||
+        Piece.sameColor(pieceOnTargetSquare, enemy_color)) {
+      if (alsoCheck) {
+        if (isMoveLegal(startSquare, targetSquare))
+          Moves.push_back(Move(startSquare, targetSquare));
+      } else {
+        Moves.push_back(Move(startSquare, targetSquare));
+      }
+    }
   }
 };
 

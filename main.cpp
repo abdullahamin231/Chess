@@ -12,9 +12,9 @@ int main() {
   Board board;
   ChessEngine engine(&board);
   string startingFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
-  string queenFEN = "qQ6/rR6/bB6/nN6/pp6/8/8/PP6";
+  string queenFEN = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R";
   board.loadFromFen(queenFEN);
-
+  board.whiteKingPos = 24, board.blackKingPos = 39;
   int x = -1, y = -1;
 
   /*for (int i = 1; i < 4; ++i) {
