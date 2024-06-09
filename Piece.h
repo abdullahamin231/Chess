@@ -18,7 +18,7 @@ public:
 
   bool sameColor(int piece, int color) {
     int piece_color = piece & 24;
-    return piece_color == color;
+    return (piece_color != 0) && piece_color == color;
   }
   bool isCorrectColor(int piece, int turn) {
     if (((piece & 24) == White) && (turn == 0))

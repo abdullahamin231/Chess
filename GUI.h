@@ -50,10 +50,13 @@ public:
 
   void show_legal_moves(RenderWindow &window, const vector<Move> &Moves);
 
-  void draw(RenderWindow &window, int *Squares, int picked_piece);
+  void draw(RenderWindow &window, int *Squares, int ox, int oy);
 };
 
 inline void GUI::show_picked(RenderWindow &window, int picked, int x, int y) {
+  // Shows dimmed piece that follows the mouse
+  if (picked == 0)
+    return;
   Sprite piece;
   int type = picked & 7;
   int color = picked & 24;
@@ -77,7 +80,7 @@ inline void GUI::show_legal_moves(RenderWindow &window,
   }
 }
 
-inline void GUI::draw(RenderWindow &window, int *Squares, int picked_piece) {
+inline void GUI::draw(RenderWindow &window, int *Squares, int ox, int oy) {
   for (int file = 0; file < 8; file++) {
     for (int rank = 0; rank < 8; rank++) {
       graphical_board[file][rank].setPosition(
@@ -86,19 +89,16 @@ inline void GUI::draw(RenderWindow &window, int *Squares, int picked_piece) {
     }
   }
 
-  if (picked_piece != -1) { // Ensure picked_piece is a valid index
-    RectangleShape chosen;
-    chosen.setFillColor(Color(222, 111, 35));
-    chosen.setSize(Vector2f(block_size, block_size));
-    int ran = picked_piece / 8;
-    int fil = picked_piece % 8;
-    chosen.setPosition(fil * block_size, ran * block_size);
-    window.draw(chosen);
-  }
+  // purpose is to draw the selected box;
+  RectangleShape chosen;
+  chosen.setFillColor(Color(222, 111, 35));
+  chosen.setSize(Vector2f(block_size, block_size));
+  chosen.setPosition(ox * block_size, oy * block_size);
+  window.draw(chosen);
 
   for (int file = 0; file < 8; file++) {
     for (int rank = 0; rank < 8; rank++) {
-      int index = file * 8 + rank; // Calculate the index in the Squares array
+      int index = file * 8 + rank;
       int type = Squares[index] & 7;
       int color = Squares[index] & 24;
 

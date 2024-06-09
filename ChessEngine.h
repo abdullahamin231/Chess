@@ -17,9 +17,11 @@ public:
   };
 
   Move GenerateMove() {
-    vector<Move> legalMoves = board->GenerateLegalMoves();
+    /* vector<Move> legalMoves = board->GenerateLegalMoves();
     cout << legalMoves.size() << endl;
     return legalMoves[rand() % legalMoves.size()];
+    */
+    return Move(1, 1);
   }
 };
 
